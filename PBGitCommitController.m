@@ -32,6 +32,7 @@
 @implementation PBGitCommitController
 
 @synthesize index;
+@synthesize reviewSignatures;
 
 - (id)initWithRepository:(PBGitRepository *)theRepository superController:(PBGitWindowController *)controller
 {
@@ -72,7 +73,54 @@
 	[unstagedFilesController setAutomaticallyRearrangesObjects:NO];
 
 	[commitSplitView setHidden:YES];
+    
+    // This is totally not how you're supposed to store preferences in OS X.
+    // You know what? I don't care. I like my preferences synced in my dotfiles.
+    // And you're not going to catch me using XML by choice.
+    NSMutableArray* mutableSignatures = [[NSMutableArray alloc] init];
+    NSString* signatureFile = [NSString stringWithFormat:@"%@/.gitsignatures", NSHomeDirectory()];
+    NSString* signatureDefinitions = [NSString stringWithContentsOfFile:signatureFile encoding:NSUTF8StringEncoding error:nil];
+    int i;
+    if (signatureDefinitions != nil) {
+        NSArray* lines = [signatureDefinitions componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
+        for(i=0; i < [lines count]; i++) {
+            NSString* line = [lines objectAtIndex:i];
+            NSArray* parts = [line componentsSeparatedByString:@":"];
+            
+            if ([parts count] >=2) {
+                [reviewers addItemWithTitle:[parts objectAtIndex:0]];
+                NSString* fullTitle = [NSString stringWithFormat:@"Reviewed-by: %@",
+                                       [[parts objectAtIndex:1] stringByTrimmingCharactersInSet:
+                                        [NSCharacterSet whitespaceCharacterSet]]];
+                [mutableSignatures addObject:fullTitle];
+            }
+        }
+        [reviewers selectItemAtIndex:0];
+    }
+    else {
+        NSLog(@"No signatures found at file %@", signatureFile);
+        [reviewers setEnabled:FALSE];
+    }
+    reviewSignatures = mutableSignatures;
+    
 	[self performSelector:@selector(restoreCommitSplitViewPositiion) withObject:nil afterDelay:0];
+}
+
+- (void)addTextToCommitMessage:(NSString*)message
+{
+    if ([commitMessageView.string rangeOfString:message].location == NSNotFound) {
+        NSArray *selectedRanges = [commitMessageView selectedRanges];
+		commitMessageView.string = [NSString stringWithFormat:@"%@\n\n%@",
+                                    commitMessageView.string, message];
+		[commitMessageView setSelectedRanges: selectedRanges];
+    }
+}
+
+- (NSString*)defaultCommitMessage
+{
+    return [NSString stringWithFormat:@"Signed-off-by: %@ <%@>",
+            [repository.config valueForKeyPath:@"user.name"],
+            [repository.config valueForKeyPath:@"user.email"]];
 }
 
 - (void)closeView
@@ -86,20 +134,27 @@
 	return commitMessageView;
 }
 
+- (IBAction)changeReviewer:(id)sender
+{
+    NSInteger selectedIndex = [reviewers indexOfSelectedItem];
+    NSString* signature;
+    if ([reviewSignatures count] == 0) {
+        signature = [self defaultCommitMessage];
+    }
+    else {
+        signature = [reviewSignatures objectAtIndex:selectedIndex];
+    }   
+    [self addTextToCommitMessage:signature];
+    
+}
+
 - (IBAction)signOff:(id)sender
 {
-	if (![repository.config valueForKeyPath:@"user.name"] || ![repository.config valueForKeyPath:@"user.email"])
+    // TODO: Redo all this
+    if ([reviewSignatures count] == 0 &&
+        (![repository.config valueForKeyPath:@"user.name"] || ![repository.config valueForKeyPath:@"user.email"]))
 		return [[repository windowController] showMessageSheet:@"User's name not set" infoText:@"Signing off a commit requires setting user.name and user.email in your git config"];
-	NSString *SOBline = [NSString stringWithFormat:@"Signed-off-by: %@ <%@>",
-				[repository.config valueForKeyPath:@"user.name"],
-				[repository.config valueForKeyPath:@"user.email"]];
-
-	if([commitMessageView.string rangeOfString:SOBline].location == NSNotFound) {
-		NSArray *selectedRanges = [commitMessageView selectedRanges];
-		commitMessageView.string = [NSString stringWithFormat:@"%@\n\n%@",
-				commitMessageView.string, SOBline];
-		[commitMessageView setSelectedRanges: selectedRanges];
-	}
+    [self changeReviewer:nil];
 }
 
 - (void) refresh:(id) sender

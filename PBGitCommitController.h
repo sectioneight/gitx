@@ -16,11 +16,14 @@
 	// This might have to transfer over to the PBGitRepository
 	// object sometime
 	PBGitIndex *index;
+    
+    NSArray *reviewSignatures;
 	
 	IBOutlet NSTextView *commitMessageView;
 	IBOutlet NSArrayController *unstagedFilesController;
 	IBOutlet NSArrayController *cachedFilesController;
 	IBOutlet NSButton *commitButton;
+    IBOutlet NSPopUpButton *reviewers;
 
 	IBOutlet PBGitIndexController *indexController;
 	IBOutlet PBWebChangesController *webController;
@@ -28,9 +31,11 @@
 }
 
 @property(readonly) PBGitIndex *index;
+@property(readonly) NSArray *reviewSignatures;
 
 - (IBAction) refresh:(id) sender;
 - (IBAction) commit:(id) sender;
 - (IBAction) forceCommit:(id) sender;
-- (IBAction)signOff:(id)sender;
+- (IBAction) signOff:(id) sender;
+- (IBAction) changeReviewer:(id) sender;
 @end
